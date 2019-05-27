@@ -17,7 +17,7 @@ import smbus
 import yaml
 import os.path
 from duckietown_utils import get_duckiefleet_root
-
+import numpy as np
 
 class LightSensor(object):
 
@@ -52,9 +52,43 @@ class LightSensor(object):
 		self.msg_light_sensor = LightSensorM()
 		self.sensor_pub = rospy.Publisher('~sensor_data', LightSensorM, queue_size=1)
 		rate = rospy.Rate(10)
-		while not rospy.is_shutdown():
-			self.get_lux()
+		self.lux1 = []
+		self.lux2 = []
+		input("Are you ready for the first light evaluation(ENTER)?")
+
+		for count in range(100):
+			self.lux1.append(self.get_lux())
 			rate.sleep()
+		
+		val1 = input("How much was the light luminescence?")
+		input("Are you ready for the next light evaluation(ENTER)?")
+
+		for count in range(100):
+			self.lux2.append(self.get_lux())
+			rate.sleep()
+		val2 = input("How much was the light luminescence?")
+
+		std1 = np.std(self.lux1)
+		med1 =np.median(self.lux1)
+		std2 = np.std(self.lux2)
+		med2 =np.median(self.lux2)
+		#make sure that the standard deviation is not to big
+		self.mult = abs((val2-val1)/(med2-val1))
+		self.offset = val1 - self.mult * med1
+
+
+	def set_param(self):
+		data = {
+			"calibration_time": time.strftime("%Y-%m-%d-%H-%M-%S"),
+			"mult": self.mult,
+			"offset": self.offset
+		}
+		file_name = self.getFilePath(self.veh_name)
+		with open(file_name, 'w') as outfile:
+				outfile.write(yaml.dump(data, default_flow_style=False))
+
+		rospy.loginfo("[%s] Saved to %s" %(self.node_name, file_name))	
+
 
 	def get_lux(self):
 		# Read R, G, B, C color data from the sensor.
@@ -84,6 +118,7 @@ class LightSensor(object):
 		self.msg_light_sensor.lux = lux
 		self.msg_light_sensor.temp = temp
 		self.sensor_pub.publish(self.msg_light_sensor)
+		return lux
 
 		#rate.sleep()
 	
