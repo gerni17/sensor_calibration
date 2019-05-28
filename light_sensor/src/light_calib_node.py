@@ -74,7 +74,7 @@ class LightSensor(object):
 		std2 = np.std(self.lux2)
 		med2 =np.median(self.lux2)
 		#make sure that the standard deviation is not to big
-		self.mult = abs((val2-val1)/(med2-val1))
+		self.mult = (val2-val1)/(med2-med1)
 		self.offset = val1 - self.mult * med1
 		self.set_param()
 		return
