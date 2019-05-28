@@ -18,6 +18,7 @@ import yaml
 import os.path
 from duckietown_utils import get_duckiefleet_root
 import numpy as np
+from future.builtins import input
 
 class LightSensor(object):
 
@@ -40,13 +41,11 @@ class LightSensor(object):
 				integration_time=Adafruit_TCS34725.TCS34725_INTEGRATIONTIME_700MS, \
 				gain=Adafruit_TCS34725.TCS34725_GAIN_1X)
 
-		#Set parameter
-		self.readParamFromFile()
-		#Set local gain using yaml
-		self.gain = self.setup_parameter("~gain", 24)
-		self.gainr = self.setup_parameter("~gainr", 0.5)
-		self.mult = self.setup_parameter("~mult",1)
-		self.offset = self.setup_parameter("~offset", 1)
+		# #Set parameter
+		# self.readParamFromFile()
+		# #Set local gain using yaml
+		# self.mult = self.setup_parameter("~mult",1)
+		# self.offset = self.setup_parameter("~offset", 1)
 		
 		#ROS-Publications
 		self.msg_light_sensor = LightSensorM()
@@ -54,19 +53,21 @@ class LightSensor(object):
 		rate = rospy.Rate(10)
 		self.lux1 = []
 		self.lux2 = []
-		input("Are you ready for the first light evaluation(ENTER)?")
+		input("Are you ready for the first light evaluation (ENTER)?")
 
-		for count in range(100):
-			self.lux1.append(self.get_lux())
+		for count in range(53):
+			if count > 3:
+				self.lux1.append(self.get_lux())
 			rate.sleep()
 		
-		val1 = input("How much was the light luminescence?")
-		input("Are you ready for the next light evaluation(ENTER)?")
+		val1 = int( input("How much was the light luminescence?"))
+		input("Are you ready for the next light evaluation (ENTER)?")
 
-		for count in range(100):
-			self.lux2.append(self.get_lux())
+		for count in range(53):
+			if count > 3:
+				self.lux2.append(self.get_lux())
 			rate.sleep()
-		val2 = input("How much was the light luminescence?")
+		val2 = int( input("How much was the light luminescence?"))
 
 		std1 = np.std(self.lux1)
 		med1 =np.median(self.lux1)
@@ -75,13 +76,15 @@ class LightSensor(object):
 		#make sure that the standard deviation is not to big
 		self.mult = abs((val2-val1)/(med2-val1))
 		self.offset = val1 - self.mult * med1
+		self.set_param()
+		return
 
 
 	def set_param(self):
 		data = {
 			"calibration_time": time.strftime("%Y-%m-%d-%H-%M-%S"),
-			"mult": self.mult,
-			"offset": self.offset
+			"mult": int(self.mult),
+			"offset": int(self.offset)
 		}
 		file_name = self.getFilePath(self.veh_name)
 		with open(file_name, 'w') as outfile:
@@ -97,7 +100,7 @@ class LightSensor(object):
 		temp = Adafruit_TCS34725.calculate_color_temperature(r, g, b)
 		#Calculate lux and multiply it with gain
 		lux = Adafruit_TCS34725.calculate_lux(r, g, b)
-		real_lux= self.mult * lux + self.offset
+		real_lux= lux 
 		# Calculate lux out of RGB measurements.
 		print("temp [k]= ", temp)
 		print("r :", r)
@@ -125,42 +128,43 @@ class LightSensor(object):
 	def getFilePath(self, name):
 		return ('/data/config/calibrations/light-sensor/' + name + ".yaml")
     
-	def readParamFromFile(self):
-		#Check file existance
-		fname = self.getFilePath(self.veh_name)
-		# Use default.yaml if file doesn't exsit
-		if not os.path.isfile(fname):
-			rospy.logwarn("[%s] %s does not exist. Using default.yaml." %(self.node_name,fname))
-			fname = self.getFilePath("default")
+	# def readParamFromFile(self):
+	# 	#Check file existance
+	# 	fname = self.getFilePath(self.veh_name)
+	# 	# Use default.yaml if file doesn't exsit
+	# 	if not os.path.isfile(fname):
+	# 		rospy.logwarn("[%s] %s does not exist. Using default.yaml." %(self.node_name,fname))
+	# 		fname = self.getFilePath("default")
 
-		with open(fname, 'r') as in_file:
-			try:
-				yaml_dict = yaml.load(in_file)
-			except yaml.YAMLError as exc:
-				rospy.logfatal("[%s] YAML syntax error. File: %s fname. Exc: %s" %(self.node_name, fname, exc))
-				rospy.signal_shutdown()
-				return
+	# 	with open(fname, 'r') as in_file:
+	# 		try:
+	# 			yaml_dict = yaml.load(in_file)
+	# 		except yaml.YAMLError as exc:
+	# 			rospy.logfatal("[%s] YAML syntax error. File: %s fname. Exc: %s" %(self.node_name, fname, exc))
+	# 			rospy.signal_shutdown()
+	# 			return
 
-        # Set parameters using value in yaml file
-		if yaml_dict is None:
-        	# Empty yaml file
-			return
-		for param_name in ["gainr", "gain", "mult", "offset"]:
-			param_value = yaml_dict.get(param_name)
-			if param_name is not None:
-				rospy.set_param("~"+param_name, param_value)
-			else:
-				# Skip if not defined, use default value instead.
-				pass
+  #       # Set parameters using value in yaml file
+	# 	if yaml_dict is None:
+  #       	# Empty yaml file
+	# 		return
+	# 	for param_name in ["gainr", "gain", "mult", "offset"]:
+	# 		param_value = yaml_dict.get(param_name)
+	# 		if param_name is not None:
+	# 			rospy.set_param("~"+param_name, param_value)
+	# 		else:
+	# 			# Skip if not defined, use default value instead.
+	# 			pass
 
-	def setup_parameter(self, param_name, default_value):
-		value = rospy.get_param(param_name, default_value)
-    	# Write to parameter server for transparency
-		rospy.set_param(param_name, value)
-		rospy.loginfo("[%s] %s = %s " % (self.node_name, param_name, value))
-		return value
+	# def setup_parameter(self, param_name, default_value):
+	# 	value = rospy.get_param(param_name, default_value)
+  #   	# Write to parameter server for transparency
+	# 	rospy.set_param(param_name, value)
+	# 	rospy.loginfo("[%s] %s = %s " % (self.node_name, param_name, value))
+	# 	return value
 
 if __name__ == '__main__':
 	rospy.init_node('light_sensor_node', anonymous=False)
-	light_sensor_node = LightSensor()
-	rospy.spin()
+	light_calib_node = LightSensor()
+	#rospy.spin()
+	
